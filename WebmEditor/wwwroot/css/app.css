@@ -1,0 +1,50 @@
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; }
+body { background: #1e1e1e; color: #ddd; font: 13px 'Segoe UI', sans-serif; overflow: hidden; }
+#app { display: flex; flex-direction: column; }
+#editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+button { background: #3a3a3a; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 5px 10px; cursor: pointer; font: inherit; }
+button:hover { background: #484848; }
+button:disabled { opacity: .5; cursor: default; }
+input[type=text], input[type=number], input:not([type]) { background: #181818; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 4px 6px; font: inherit; }
+.grow { flex: 1; }
+
+.topbar, .exportbar, .transport { display: flex; gap: 8px; align-items: center; padding: 8px; background: #2b2b2b; }
+.transport { padding: 6px 8px; border-top: 1px solid #111; }
+.ffpath { width: 260px; }
+.outpath { flex: 1; }
+button.export { background: #c0392b; border-color: #e74c3c; font-weight: 700; padding: 6px 22px; }
+button.export:hover { background: #d84a3a; }
+
+.stage { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: center; background: #0f0f0f; padding: 8px; }
+.stage video { max-width: 100%; max-height: 100%; background: repeating-conic-gradient(#5a5a5a 0 25%, #444 0 50%) 50% / 20px 20px; }
+
+.time { font: 13px Consolas, monospace; min-width: 150px; }
+.transport .num { width: 90px; }
+.small { color: #999; font-size: 12px; }
+
+.tlwrap { height: 190px; overflow-x: auto; overflow-y: hidden; background: #181818; border-top: 1px solid #000; }
+.tl { position: relative; height: 100%; }
+#ruler { display: block; cursor: pointer; }
+.track { position: relative; height: 72px; margin-top: 6px; background: #202020; cursor: pointer; }
+.vbar { position: absolute; top: 6px; bottom: 6px; background: #3d6fb5; border-radius: 4px; color: #fff; padding: 4px 10px; overflow: hidden; white-space: nowrap; pointer-events: none; }
+.clip { position: absolute; top: 4px; bottom: 4px; background: #1f3b4d; border: 1px solid #7fd1ff; border-radius: 4px; overflow: hidden; cursor: grab; touch-action: none; }
+.clip:active { cursor: grabbing; }
+.clip canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.clip .lbl { position: absolute; left: 12px; top: 2px; font-size: 11px; color: #fff; pointer-events: none; text-shadow: 0 0 3px #000; white-space: nowrap; }
+.clip .h { position: absolute; top: 0; bottom: 0; width: 8px; background: rgba(255,255,255,.35); cursor: ew-resize; z-index: 2; }
+.clip .hl { left: 0; }
+.clip .hr { right: 0; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4d4d; pointer-events: none; z-index: 5; }
+
+.log { height: 90px; margin: 0; overflow: auto; background: #111; padding: 6px 8px; font: 11px Consolas, monospace; white-space: pre-wrap; color: #aaa; }
+
+.banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600; color: #fff; }
+.banner .msg { flex: 1; word-break: break-all; }
+.banner.ok { background: #1e7a3f; }
+.banner.err { background: #8a2323; }
+.banner.run { background: #2d4f7a; }
+.banner .x { background: transparent; border: 0; font-size: 15px; }
+.spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

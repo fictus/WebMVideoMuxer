@@ -4,3 +4,7 @@
 
 /.vs/WebmAudioMuxer.slnx
 /obj/Debug/net10.0-windows
+/obj
+/WebmEditor/.vs/WebmEditor.slnx
+/WebmEditor/bin/Debug/net10.0-windows10.0.19041.0/win-x64
+/WebmEditor/obj

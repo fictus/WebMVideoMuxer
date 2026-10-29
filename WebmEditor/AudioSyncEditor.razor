@@ -1,0 +1,153 @@
+@using System.Diagnostics
+@using System.Globalization
+@using Microsoft.Maui.Devices
+@using Microsoft.Maui.Storage
+@inject IJSRuntime JS
+
+<div class="topbar">
+    <button @onclick="OpenVideo">Open video…</button>
+    <button @onclick="OpenAudio">Open audio…</button>
+    <span class="grow"></span>
+    <span>ffmpeg:</span>
+    <input class="ffpath" @bind="ffmpeg" @bind:event="oninput" />
+    <button @onclick="BrowseFfmpeg">…</button>
+</div>
+
+<div id="editor"></div>
+
+<div class="exportbar">
+    <span>Output:</span>
+    <input class="outpath" @bind="outPath" @bind:event="oninput" />
+    <button class="export" @onclick="ExportAsync" disabled="@busy">@(busy ? "EXPORTING…" : "EXPORT")</button>
+</div>
+@if (status != "")
+{
+    <div class="banner @statusKind">
+        @if (statusKind == "run") { <span class="spinner"></span> }
+        <span class="msg">@status</span>
+        @if (statusKind == "ok") { <button @onclick="ShowInFolder">Show in folder</button> }
+        @if (statusKind != "run") { <button class="x" @onclick="DismissStatus">✕</button> }
+    </div>
+}
+<pre class="log">@(string.Join("\n", lines))</pre>
+
+@code {
+    string ffmpeg = "ffmpeg", outPath = "", videoPath = "", audioPath = "";
+    bool busy;
+    string status = "", statusKind = "";   // statusKind: run | ok | err
+    readonly List<string> lines = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await JS.InvokeVoidAsync("editor.init", "editor");
+        else await JS.InvokeVoidAsync("editor.scrollLog");
+    }
+
+    void Say(string s)
+    {
+        lines.Add(s);
+        if (lines.Count > 60) lines.RemoveAt(0);
+        StateHasChanged();
+    }
+
+    void SetStatus(string kind, string text) { statusKind = kind; status = text; StateHasChanged(); }
+    void DismissStatus() { status = ""; statusKind = ""; }
+
+    void ShowInFolder()
+    {
+        try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{outPath}\"") { UseShellExecute = true }); }
+        catch (Exception ex) { Say("Could not open folder: " + ex.Message); }
+    }
+
+    static FilePickerFileType Types(params string[] ext) =>
+        new(new Dictionary<DevicePlatform, IEnumerable<string>> { [DevicePlatform.WinUI] = ext });
+
+    async Task OpenVideo()
+    {
+        try
+        {
+            var r = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Choose the WebM video", FileTypes = Types(".webm") });
+            if (r == null) return;
+            videoPath = r.FullPath;
+            Say("Opening video: " + videoPath);
+            Say(await JS.InvokeAsync<string>("editor.loadVideo", MediaHost.Publish(videoPath), System.IO.Path.GetFileName(videoPath)));
+            outPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(videoPath)!,
+                System.IO.Path.GetFileNameWithoutExtension(videoPath) + "_with_audio.webm");
+        }
+        catch (Exception ex) { Say("Open video failed: " + ex); }
+    }
+
+    async Task OpenAudio()
+    {
+        try
+        {
+            var r = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Choose the audio file", FileTypes = Types(".wav", ".mp3", ".ogg", ".flac", ".m4a") });
+            if (r == null) return;
+            audioPath = r.FullPath;
+            Say("Opening audio: " + audioPath);
+            Say(await JS.InvokeAsync<string>("editor.loadAudio", MediaHost.Publish(audioPath), System.IO.Path.GetFileName(audioPath)));
+        }
+        catch (Exception ex) { Say("Open audio failed: " + ex); }
+    }
+
+    async Task BrowseFfmpeg()
+    {
+        var r = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Locate ffmpeg.exe", FileTypes = Types(".exe") });
+        if (r != null) ffmpeg = r.FullPath;
+    }
+
+    static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+
+    async Task ExportAsync()
+    {
+        if (videoPath == "" || audioPath == "") { SetStatus("err", "✖ Open a video and an audio file first."); return; }
+        if (string.IsNullOrWhiteSpace(outPath)) { SetStatus("err", "✖ Enter an output path."); return; }
+        if (string.Equals(System.IO.Path.GetFullPath(outPath), System.IO.Path.GetFullPath(videoPath), StringComparison.OrdinalIgnoreCase))
+        { SetStatus("err", "✖ The output must be a different file than the source video."); return; }
+
+        var st = await JS.InvokeAsync<double[]>("editor.getState");
+        double delay = st[0], ss = st[1], len = st[2], vdur = st[3];
+        if (len <= 0) { SetStatus("err", "✖ The audio clip is empty (trimmed away or placed before the video)."); return; }
+
+        var a = new List<string> { "-y", "-i", videoPath };
+        if (ss > 0) { a.Add("-ss"); a.Add(F(ss)); }          // input options for the audio file
+        a.Add("-t"); a.Add(F(len));
+        a.Add("-i"); a.Add(audioPath);
+        a.AddRange(new[] { "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy" });   // copy video = alpha untouched
+        if (delay > 0) { a.Add("-af"); a.Add($"adelay={(long)Math.Round(delay * 1000)}:all=1"); }
+        a.AddRange(new[] { "-c:a", "libopus", "-b:a", "128k" });
+        if (vdur > 0) { a.Add("-t"); a.Add(F(vdur)); }       // never longer than the video
+        a.Add(outPath);
+
+        lines.Clear();
+        Say("ffmpeg " + string.Join(" ", a.Select(x => x.Contains(' ') ? $"\"{x}\"" : x)));
+        busy = true;
+        SetStatus("run", "Exporting… please wait.");
+        int code = await RunAsync(ffmpeg.Trim(), a);
+        busy = false;
+        if (code == 0 && File.Exists(outPath))
+        {
+            Say("Done: " + outPath);
+            SetStatus("ok", "✔ Export complete: " + outPath);
+        }
+        else
+        {
+            Say($"ffmpeg exited with code {code}.");
+            SetStatus("err", $"✖ Export failed (ffmpeg exit code {code}). See the log below.");
+        }
+    }
+
+    async Task<int> RunAsync(string exe, List<string> args)
+    {
+        var psi = new ProcessStartInfo(exe) { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+        foreach (var x in args) psi.ArgumentList.Add(x);
+        using var p = new Process { StartInfo = psi };
+        p.ErrorDataReceived += (_, e) => { if (e.Data != null) _ = InvokeAsync(() => Say(e.Data)); };
+        try { p.Start(); }
+        catch (Exception ex) { Say($"Could not start {exe}: {ex.Message}"); return -1; }
+        p.BeginErrorReadLine();
+        p.BeginOutputReadLine();
+        await p.WaitForExitAsync();
+        return p.ExitCode;
+    }
+}
